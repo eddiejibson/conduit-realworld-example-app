@@ -11,12 +11,11 @@ const {
   appendTagList,
   slugify,
 } = require("../helper/helpers");
-const { Article, Tag, User } = require("../models");
+const User = require("../entities/user.entity");
+const Article = require("../entities/article.entity");
+const Tag = require("../entities/tag.entity");
 
-const includeOptions = [
-  { model: Tag, as: "tagList", attributes: ["name"] },
-  { model: User, as: "author", attributes: { exclude: ["email"] } },
-];
+const AppDataSource = require("../db.config");
 
 //? All Articles - by Author/by Tag/Favorited by user
 const allArticles = async (req, res, next) => {
@@ -25,43 +24,38 @@ const allArticles = async (req, res, next) => {
 
     const { author, tag, favorited, limit = 3, offset = 0 } = req.query;
     const searchOptions = {
-      include: [
-        {
-          model: Tag,
-          as: "tagList",
-          attributes: ["name"],
-          ...(tag && { where: { name: tag } }),
-        },
-        {
-          model: User,
-          as: "author",
-          attributes: { exclude: ["email"] },
-          ...(author && { where: { username: author } }),
-        },
-      ],
-      limit: parseInt(limit),
-      offset: offset * limit,
-      order: [["createdAt", "DESC"]],
+      relations: ["tagList", "author"],
+      where: {},
+      take: parseInt(limit),
+      skip: offset * limit,
+      order: { createdAt: "DESC" },
     };
+
+    if (tag) {
+      searchOptions.where.tagList = { name: tag };
+    }
+    if (author) {
+      searchOptions.where.author = { username: author };
+    }
 
     let articles = { rows: [], count: 0 };
     if (favorited) {
-      const user = await User.findOne({ where: { username: favorited } });
+      const user = await AppDataSource.getRepository(User).findOne({
+        where: { username: favorited },
+      });
 
-      articles.rows = await user.getFavorites(searchOptions);
+      articles.rows = await user.favorites(searchOptions);
       articles.count = await user.countFavorites();
     } else {
-      articles = await Article.findAndCountAll(searchOptions);
+      articles = await AppDataSource.getRepository(Article).findAndCount(
+        searchOptions
+      );
     }
 
     for (let article of articles.rows) {
-      const articleTags = await article.getTagList();
-
-      appendTagList(articleTags, article);
+      appendTagList(article.tagList, article);
       await appendFollowers(loggedUser, article);
       await appendFavorites(loggedUser, article);
-
-      delete article.dataValues.Favorites;
     }
 
     res.json({ articles: articles.rows, articlesCount: articles.count });
@@ -82,34 +76,41 @@ const createArticle = async (req, res, next) => {
     if (!body) throw new FieldRequiredError("An article body");
 
     const slug = slugify(title);
-    const slugInDB = await Article.findOne({ where: { slug: slug } });
+    const slugInDB = await AppDataSource.getRepository(Article).findOne({
+      where: { slug: slug },
+    });
     if (slugInDB) throw new AlreadyTakenError("Title");
 
-    const article = await Article.create({
+    const article = AppDataSource.getRepository(Article).create({
       slug: slug,
       title: title,
       description: description,
       body: body,
+      author: loggedUser,
     });
 
+    await AppDataSource.getRepository(Article).save(article);
+
     for (const tag of tagList) {
-      const tagInDB = await Tag.findByPk(tag.trim());
+      const tagInDB = await AppDataSource.getRepository(Tag).findOne({
+        where: { name: tag.trim() },
+      });
 
       if (tagInDB) {
-        await article.addTagList(tagInDB);
+        article.tagList.push(tagInDB);
       } else if (tag.length > 2) {
-        const newTag = await Tag.create({ name: tag.trim() });
-
-        await article.addTagList(newTag);
+        const newTag = AppDataSource.getRepository(Tag).create({
+          name: tag.trim(),
+        });
+        await AppDataSource.getRepository(Tag).save(newTag);
+        article.tagList.push(newTag);
       }
     }
 
-    delete loggedUser.dataValues.token;
+    await AppDataSource.getRepository(Article).save(article);
 
-    article.dataValues.tagList = tagList;
-    article.setAuthor(loggedUser);
-    article.dataValues.author = loggedUser;
-    await appendFollowers(loggedUser, loggedUser);
+    article.tagList = tagList;
+    await appendFollowers(loggedUser, article);
     await appendFavorites(loggedUser, article);
 
     res.status(201).json({ article });
@@ -125,20 +126,18 @@ const articlesFeed = async (req, res, next) => {
     if (!loggedUser) throw new UnauthorizedError();
 
     const { limit = 3, offset = 0 } = req.query;
-    const authors = await loggedUser.getFollowing();
+    const authors = await loggedUser.following;
 
-    const articles = await Article.findAndCountAll({
-      include: includeOptions,
-      limit: parseInt(limit),
-      offset: offset * limit,
-      order: [["createdAt", "DESC"]],
-      where: { userId: authors.map((author) => author.id) },
+    const articles = await AppDataSource.getRepository(Article).findAndCount({
+      relations: ["tagList", "author"],
+      where: { author: { id: In(authors.map((author) => author.id)) } },
+      take: parseInt(limit),
+      skip: offset * limit,
+      order: { createdAt: "DESC" },
     });
 
     for (const article of articles.rows) {
-      const articleTags = await article.getTagList();
-
-      appendTagList(articleTags, article);
+      appendTagList(article.tagList, article);
       await appendFollowers(loggedUser, article);
       await appendFavorites(loggedUser, article);
     }
@@ -155,9 +154,9 @@ const singleArticle = async (req, res, next) => {
     const { loggedUser } = req;
 
     const { slug } = req.params;
-    const article = await Article.findOne({
+    const article = await AppDataSource.getRepository(Article).findOne({
       where: { slug: slug },
-      include: includeOptions,
+      relations: ["tagList", "author"],
     });
     if (!article) throw new NotFoundError("Article");
 
@@ -178,9 +177,9 @@ const updateArticle = async (req, res, next) => {
     if (!loggedUser) throw new UnauthorizedError();
 
     const { slug } = req.params;
-    const article = await Article.findOne({
+    const article = await AppDataSource.getRepository(Article).findOne({
       where: { slug: slug },
-      include: includeOptions,
+      relations: ["tagList", "author"],
     });
     if (!article) throw new NotFoundError("Article");
 
@@ -195,7 +194,7 @@ const updateArticle = async (req, res, next) => {
     }
     if (description) article.description = description;
     if (body) article.body = body;
-    await article.save();
+    await AppDataSource.getRepository(Article).save(article);
 
     appendTagList(article.tagList, article);
     await appendFollowers(loggedUser, article);
@@ -214,9 +213,9 @@ const deleteArticle = async (req, res, next) => {
     if (!loggedUser) throw new UnauthorizedError();
 
     const { slug } = req.params;
-    const article = await Article.findOne({
+    const article = await AppDataSource.getRepository(Article).findOne({
       where: { slug: slug },
-      include: includeOptions,
+      relations: ["tagList", "author"],
     });
     if (!article) throw new NotFoundError("Article");
 
@@ -224,7 +223,7 @@ const deleteArticle = async (req, res, next) => {
       throw new ForbiddenError("article");
     }
 
-    await article.destroy();
+    await AppDataSource.getRepository(Article).remove(article);
 
     res.json({ message: { body: ["Article deleted successfully"] } });
   } catch (error) {

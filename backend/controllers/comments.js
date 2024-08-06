@@ -5,7 +5,10 @@ const {
   ForbiddenError,
 } = require("../helper/customErrors");
 const { appendFollowers } = require("../helper/helpers");
-const { Article, Comment, User } = require("../models");
+const Article = require("../entities/article.entity.js");
+const Comment = require("../entities/comment.entity.js");
+const User = require("../entities/user.entity.js");
+const AppDataSource = require("../db.config.js");
 
 //? All Comments for Article
 const allComments = async (req, res, next) => {
@@ -13,13 +16,15 @@ const allComments = async (req, res, next) => {
     const { loggedUser } = req;
     const { slug } = req.params;
 
-    const article = await Article.findOne({ where: { slug: slug } });
+    const articleRepository = AppDataSource.getRepository(Article);
+    const commentRepository = AppDataSource.getRepository(Comment);
+
+    const article = await articleRepository.findOne({ where: { slug: slug } });
     if (!article) throw new NotFoundError("Article");
 
-    const comments = await article.getComments({
-      include: [
-        { model: User, as: "author", attributes: { exclude: ["email"] } },
-      ],
+    const comments = await commentRepository.find({
+      where: { article: article },
+      relations: ["author"],
     });
 
     for (const comment of comments) {
@@ -42,17 +47,22 @@ const createComment = async (req, res, next) => {
     if (!body) throw new FieldRequiredError("Comment body");
 
     const { slug } = req.params;
-    const article = await Article.findOne({ where: { slug: slug } });
+    const articleRepository = AppDataSource.getRepository(Article);
+    const commentRepository = AppDataSource.getRepository(Comment);
+
+    const article = await articleRepository.findOne({ where: { slug: slug } });
     if (!article) throw new NotFoundError("Article");
 
-    const comment = await Comment.create({
+    const comment = commentRepository.create({
       body: body,
-      articleId: article.id,
-      userId: loggedUser.id,
+      article: article,
+      author: loggedUser,
     });
 
-    delete loggedUser.dataValues.token;
-    comment.dataValues.author = loggedUser;
+    await commentRepository.save(comment);
+
+    delete loggedUser.token;
+    comment.author = loggedUser;
     await appendFollowers(loggedUser, loggedUser);
 
     res.status(201).json({ comment });
@@ -68,15 +78,19 @@ const deleteComment = async (req, res, next) => {
     if (!loggedUser) throw new UnauthorizedError();
 
     const { slug, commentId } = req.params;
+    const commentRepository = AppDataSource.getRepository(Comment);
 
-    const comment = await Comment.findByPk(commentId);
+    const comment = await commentRepository.findOne({
+      where: { id: commentId },
+      relations: ["author"],
+    });
     if (!comment) throw new NotFoundError("Comment");
 
-    if (loggedUser.id !== comment.userId) {
+    if (loggedUser.id !== comment.author.id) {
       throw new ForbiddenError("comment");
     }
 
-    await comment.destroy();
+    await commentRepository.remove(comment);
 
     res.json({ message: { body: ["Comment deleted successfully"] } });
   } catch (error) {

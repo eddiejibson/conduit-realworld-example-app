@@ -17,7 +17,10 @@
   ],
   "scripts": {
     "dev": "concurrently --names 'Node,Vite' -c 'green,blue' 'npm run dev -w backend' 'npm run dev -w frontend'",
-    "sqlz": "npx -w backend sequelize-cli",
+    "typeorm": "typeorm ",
+    "migration:generate": "typeorm migration:generate -d ./backend/db.config.js -o=true",
+    "migration:run": "typeorm migration:run -d ./backend/db.config.js",
+    "migration:revert": "typeorm migration:revert -d ./backend/backend/db.config.js",
     "start": "npm run build -w frontend && npm run start -w backend",
     "test": "vitest"
   },

@@ -1,7 +1,12 @@
-"use strict";
+const AppDataSource = require("../db.config.js");
+const User = require("../entities/User");
 
 module.exports = {
-  async up(queryInterface, Sequelize) {
+  async up() {
+    await AppDataSource.initialize();
+
+    const userRepository = AppDataSource.getRepository(User);
+
     const users = Array(5)
       .fill(null)
       .map((_, index) => ({
@@ -12,10 +17,14 @@ module.exports = {
         updatedAt: new Date(),
       }));
 
-    await queryInterface.bulkInsert("Users", users, {});
+    await userRepository.save(users);
   },
 
-  async down(queryInterface, Sequelize) {
-    await queryInterface.bulkDelete("Users", null, {});
+  async down() {
+    await AppDataSource.initialize();
+
+    const userRepository = AppDataSource.getRepository(User);
+
+    await userRepository.clear();
   },
 };

@@ -4,7 +4,8 @@ const {
   appendFavorites,
   appendTagList,
 } = require("../helper/helpers");
-const { Article, Tag, User } = require("../models");
+const Article = require("../entities/article.entity");
+const AppDataSource = require("../db.config");
 
 //*  Favorite/Unfavorite Article
 const favoriteToggler = async (req, res, next) => {
@@ -14,31 +15,34 @@ const favoriteToggler = async (req, res, next) => {
 
     const { slug } = req.params;
 
-    const article = await Article.findOne({
+    const article = await AppDataSource.getRepository(Article).findOne({
       where: { slug: slug },
-      include: [
-        {
-          model: Tag,
-          as: "tagList",
-          attributes: ["name"],
-        },
-        {
-          model: User,
-          as: "author",
-          attributes: ["username", "bio", "image" /* "following" */],
-        },
-      ],
+      relations: ["tagList", "author"],
     });
     if (!article) throw new NotFoundError("Article");
 
-    if (req.method === "POST") await article.addUser(loggedUser);
-    if (req.method === "DELETE") await article.removeUser(loggedUser);
+    if (req.method === "POST") {
+      await AppDataSource.createQueryBuilder()
+        .relation(Article, "favoritedBy")
+        .of(article)
+        .add(loggedUser);
+    } else if (req.method === "DELETE") {
+      await AppDataSource.createQueryBuilder()
+        .relation(Article, "favoritedBy")
+        .of(article)
+        .remove(loggedUser);
+    }
 
-    appendTagList(article.tagList, article);
-    await appendFollowers(loggedUser, article);
-    await appendFavorites(loggedUser, article);
+    const updatedArticle = await AppDataSource.getRepository(Article).findOne({
+      where: { slug: slug },
+      relations: ["tagList", "author", "favoritedBy"],
+    });
 
-    res.json({ article });
+    appendTagList(updatedArticle.tagList, updatedArticle);
+    await appendFollowers(loggedUser, updatedArticle);
+    await appendFavorites(loggedUser, updatedArticle);
+
+    res.json({ article: updatedArticle });
   } catch (error) {
     next(error);
   }

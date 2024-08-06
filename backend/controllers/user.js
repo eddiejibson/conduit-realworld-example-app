@@ -1,5 +1,7 @@
 const { UnauthorizedError } = require("../helper/customErrors");
 const { bcryptHash } = require("../helper/bcrypt");
+const User = require("../entities/user.entity");
+const AppDataSource = require("../db.config.js");
 
 //* Current User
 const currentUser = async (req, res, next) => {
@@ -7,10 +9,14 @@ const currentUser = async (req, res, next) => {
     const { loggedUser } = req;
     if (!loggedUser) throw new UnauthorizedError();
 
-    loggedUser.dataValues.email = req.headers.email;
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne(loggedUser.id);
+    if (!user) throw new UnauthorizedError();
+
+    user.email = req.headers.email;
     delete req.headers.email;
 
-    res.json({ user: loggedUser });
+    res.json({ user });
   } catch (error) {
     next(error);
   }
@@ -22,24 +28,26 @@ const updateUser = async (req, res, next) => {
     const { loggedUser } = req;
     if (!loggedUser) throw new UnauthorizedError();
 
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne(loggedUser.id);
+    if (!user) throw new UnauthorizedError();
+
     const {
       user: { password },
-      user,
+      user: userData,
     } = req.body;
 
-    Object.entries(user).forEach((entry) => {
-      const [key, value] = entry;
-
-      if (value !== undefined && key !== "password") loggedUser[key] = value;
+    Object.entries(userData).forEach(([key, value]) => {
+      if (value !== undefined && key !== "password") user[key] = value;
     });
 
-    if (password !== undefined || password !== "") {
-      loggedUser.password = await bcryptHash(password);
+    if (password !== undefined && password !== "") {
+      user.password = await bcryptHash(password);
     }
 
-    await loggedUser.save();
+    await userRepository.save(user);
 
-    res.json({ user: loggedUser });
+    res.json({ user });
   } catch (error) {
     next(error);
   }
