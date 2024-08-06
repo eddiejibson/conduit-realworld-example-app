@@ -1,11 +1,10 @@
-require("dotenv").config();
+require("dotenv").config({ path: `${__dirname}/../.env` });
 const env = process.env.NODE_ENV || "development";
 const PORT = process.env.PORT || 3001;
 const express = require("express");
 const cors = require("cors");
-const { sequelize } = require("./models");
+const AppDataSource = require("./db.config.js");
 const errorHandler = require("./middleware/errorHandler");
-
 const usersRoutes = require("./routes/users");
 const userRoutes = require("./routes/user");
 const articlesRoutes = require("./routes/articles");
@@ -18,7 +17,7 @@ app.use(express.json());
 
 (async () => {
   try {
-    await sequelize.sync({ alter: true });
+    await AppDataSource.initialize();
     console.log(`Connection with ${env} database has been established.`);
   } catch (error) {
     console.error("Unable to connect to the database:", error);
@@ -36,10 +35,10 @@ app.use("/api/articles", articlesRoutes);
 app.use("/api/profiles", profilesRoutes);
 app.use("/api/tags", tagsRoutes);
 app.get("*", (req, res) =>
-  res.status(404).json({ errors: { body: ["Not found"] } }),
+  res.status(404).json({ errors: { body: ["Not found"] } })
 );
 app.use(errorHandler);
 
 app.listen(PORT, () =>
-  console.log(`Server running on http://localhost:${PORT}`),
+  console.log(`Server running on http://localhost:${PORT}`)
 );

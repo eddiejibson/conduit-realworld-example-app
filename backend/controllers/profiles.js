@@ -1,6 +1,7 @@
 const { UnauthorizedError, NotFoundError } = require("../helper/customErrors");
 const { appendFollowers } = require("../helper/helpers");
-const { User } = require("../models");
+const User = require("../entities/user.entity");
+const AppDataSource = require("../db.config.js");
 
 //? Profile
 const getProfile = async (req, res, next) => {
@@ -8,9 +9,11 @@ const getProfile = async (req, res, next) => {
     const { loggedUser } = req;
     const { username } = req.params;
 
-    const profile = await User.findOne({
+    const userRepository = AppDataSource.getRepository(User);
+
+    const profile = await userRepository.findOne({
       where: { username: username },
-      attributes: { exclude: "email" },
+      select: ["id", "username", "bio", "image"],
     });
     if (!profile) throw new NotFoundError("User profile");
 
@@ -30,16 +33,27 @@ const followToggler = async (req, res, next) => {
 
     const { username } = req.params;
 
-    const profile = await User.findOne({
+    const userRepository = AppDataSource.getRepository(User);
+
+    const profile = await userRepository.findOne({
       where: { username: username },
-      attributes: { exclude: "email" },
+      select: ["id", "username", "bio", "image"],
+      relations: ["followers"],
     });
     if (!profile) throw new NotFoundError("User profile");
 
     if (req.method === "POST") {
-      await profile.addFollower(loggedUser);
+      if (
+        !profile.followers.some((follower) => follower.id === loggedUser.id)
+      ) {
+        profile.followers.push(loggedUser);
+        await userRepository.save(profile);
+      }
     } else if (req.method === "DELETE") {
-      await profile.removeFollower(loggedUser);
+      profile.followers = profile.followers.filter(
+        (follower) => follower.id !== loggedUser.id
+      );
+      await userRepository.save(profile);
     }
 
     await appendFollowers(loggedUser, profile);

@@ -5,6 +5,10 @@
   "scripts": {
     "dev": "node --watch index.js",
     "sqlz": "npx sequelize-cli",
+    "typeorm": "typeorm",
+    "migration:generate": "typeorm migration:generate -d ./db.config.js -o",
+    "migration:run": "typeorm migration:run -d ./db.config.js",
+    "migration:revert": "typeorm migration:revert -d ./db.config.js",
     "start": "node index.js"
   },
   "dependencies": {
@@ -15,7 +19,9 @@
     "jsonwebtoken": "^9.0.0",
     "pg": "^8.10.0",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.29.3"
+    "reflect-metadata": "^0.2.2",
+    "sequelize": "^6.29.3",
+    "typeorm": "^0.3.20"
   },
   "devDependencies": {
     "sequelize-cli": "^6.6.0"

@@ -50,45 +50,14 @@ To install the project on your computer, follow these steps:
 
 1. Create a `.env` file in the root directory of the project
 2. Add the required environment variables as specified in the [`.env.example`](backend/.env.example) file
-3. (Optional) update the Sequelize configuration parameters in the [`config.js`](backend/config/config.js) file
-4. If you are **not** using PostgreSQL, you may also have to install the driver for your database:
+3. (Optional) update the typeorm configuration parameters in the [`db.config.js`](backend/config/config.js) file
 
-   <details>
-   <summary>Use one of the following commands to install:</summary><br/>
+4. Run migrations
 
-   > Note: `-w backend` option is used to install it in the backend [`package.json`](backend/package.json).
-
-   ```bash
-   npm install -w backend pg pg-hstore  # Postgres (already installed)
-   npm install -w backend mysql2
-   npm install -w backend mariadb
-   npm install -w backend sqlite3
-   npm install -w backend tedious       # Microsoft SQL Server
-   npm install -w backend oracledb      # Oracle Database
-   ```
-
-   > :information_source: Visit [Sequelize - Installing](https://sequelize.org/docs/v6/getting-started/#installing) for more infomation.
-
-   ***
-
-   </details>
-
-5. Create database specified by configuration by executing
-
-   > :warning: Please, make sure you have already created a superuser for your database.
-
-   ```bash
-   npm run sqlz -- db:create
-   ```
-
-   > :information_source: The command `npm run sqlz` is an alias for `npx -w backend sequelize-cli`.  
-   > Execute `npm run sqlz -- --help` to see more of `sequelize-cli` commands availables.
-
-6. Optionally you can run the following command to populate your database with some dummy data:
-
-   ```bash
-   npm run sqlz -- db:seed:all
-   ```
+```bash
+cd backend/
+npm run migration:run
+```
 
 ### Usage
 
@@ -103,8 +72,16 @@ To run the project, follow these steps:
    ```
 
 2. Open a web browser and navigate to:
+
    - Home page should be available at [`http://localhost:3000/`](http://localhost:3000).
    - API endpoints should be available at [`http://localhost:3001/api`](http://localhost:3001/api).
+
+#### Running Migrations
+
+```bash
+cd backend/
+npm run  migration:generate -- ./migrations/(migrationName)
+```
 
 #### Running Tests
 

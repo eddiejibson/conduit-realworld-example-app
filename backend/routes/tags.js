@@ -1,12 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const { Tag } = require("../models");
 const { appendTagList } = require("../helper/helpers");
+const Tag = require("../entities/tag.entity");
+const AppDataSource = require("../db.config.js");
 
 // All Tags
 router.get("/", async (req, res, next) => {
   try {
-    const tagList = await Tag.findAll();
+    const tagRepository = AppDataSource.getRepository(Tag);
+    const tagList = await tagRepository.find();
 
     const tags = appendTagList(tagList);
 

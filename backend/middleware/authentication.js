@@ -1,6 +1,7 @@
 const { NotFoundError } = require("../helper/customErrors");
 const { jwtVerify } = require("../helper/jwt");
-const { User } = require("../models");
+const User = require("../entities/user.entity");
+const AppDataSource = require("../db.config.js");
 
 const verifyToken = async (req, res, next) => {
   try {
@@ -13,15 +14,16 @@ const verifyToken = async (req, res, next) => {
     const userVerified = await jwtVerify(token);
     if (!userVerified) throw new Error("Invalid Token");
 
-    req.loggedUser = await User.findOne({
-      attributes: { exclude: ["email"] },
+    const userRepository = AppDataSource.getRepository(User);
+    req.loggedUser = await userRepository.findOne({
       where: { email: userVerified.email },
+      select: ["id", "username", "bio", "image"],
     });
 
     if (!req.loggedUser) next(new NotFoundError("User"));
 
     headers.email = userVerified.email;
-    req.loggedUser.dataValues.token = token;
+    req.loggedUser.token = token;
 
     next();
   } catch (error) {
